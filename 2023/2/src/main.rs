@@ -119,7 +119,7 @@ fn main() {
     let args: Vec<String> = env::args().collect();
 
     if args.len() < 2 {
-        eprintln!("Input file expected as argument");
+        println!("Input file expected as argument");
         exit(1);
     }
 
