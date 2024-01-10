@@ -1,10 +1,10 @@
-use std::{char, cmp, env, fs, process::exit};
+use std::{char, cmp, collections::BTreeSet, env, fs, process::exit};
 
 use ndarray::{Array, Axis, Ix2};
 
 type Engine = Array<char, Ix2>;
 
-#[derive(Debug)]
+#[derive(Debug, Ord, PartialOrd, Eq, PartialEq)]
 struct EnginePart {
     val: i64,
     pos: (usize, usize),
@@ -121,11 +121,103 @@ fn get_all_nums(engine: &Engine) -> Vec<EnginePart> {
 }
 
 fn sum_parts(engine: &Engine) -> i64 {
-    let all_nums = get_all_nums(engine);
-    all_nums
+    get_all_nums(engine)
         .iter()
         .map(|num| num.is_valid_part(engine))
         .sum::<i64>()
+}
+
+fn parse_part(location: (usize, usize), engine: &Engine) -> EnginePart {
+    // let ncols = engine.len_of(Axis(1));
+    let mut col = location.1;
+    let mut num_vec: Vec<char> = vec![];
+
+    // backtrack
+    while let Some(c) = engine.get((location.0, col)) {
+        if !c.is_ascii_digit() {
+            col += 1;
+            break;
+        }
+
+        if col == 0 {
+            break;
+        }
+
+        col -= 1;
+    }
+
+    let start_col = col;
+
+    // parse part
+    while let Some(c) = engine.get((location.0, col)) {
+        if !c.is_ascii_digit() {
+            break;
+        }
+
+        num_vec.push(*c);
+
+        col += 1;
+    }
+
+    EnginePart {
+        val: num_vec.iter().collect::<String>().parse::<i64>().unwrap(),
+        pos: (location.0, start_col),
+        len: col - start_col,
+    }
+}
+
+fn find_gear_numbers(gear: (usize, usize), engine: &Engine) -> BTreeSet<EnginePart> {
+    let mut parts = BTreeSet::new();
+
+    let nrows = engine.len_of(Axis(0));
+    let ncols = engine.len_of(Axis(1));
+
+    let start_row: usize = cmp::max(0isize, isize::try_from(gear.0).unwrap() - 1)
+        .try_into()
+        .unwrap();
+    let start_col: usize = cmp::max(0isize, isize::try_from(gear.1).unwrap() - 1)
+        .try_into()
+        .unwrap();
+
+    for k in start_row..cmp::min(nrows, gear.0 + 2) {
+        for i in start_col..cmp::min(ncols, gear.1 + 2) {
+            if let Some(c) = engine.get((k, i)) {
+                if c.is_ascii_digit() {
+                    parts.insert(parse_part((k, i), engine));
+                }
+            };
+        }
+    }
+
+    parts
+}
+
+fn get_gear_ratio(gear: (usize, usize), engine: &Engine) -> i64 {
+    let parts = find_gear_numbers(gear, engine);
+
+    if parts.len() == 2 {
+        return parts
+            .iter()
+            .map(|p| p.val)
+            .reduce(|acc, v| acc * v)
+            .unwrap();
+    }
+
+    0
+}
+
+fn sum_gear_ratios(engine: &Engine) -> i64 {
+    let mut acc = 0;
+
+    for (row, line) in engine.outer_iter().enumerate() {
+        for (col, e) in line.indexed_iter() {
+            if *e == '*' {
+                acc += get_gear_ratio((row, col), engine);
+            }
+        }
+    }
+
+    acc
 }
 
 fn main() {
@@ -139,4 +231,5 @@ fn main() {
     let contents = fs::read_to_string(&args[1]).expect("Should have been able to read the file");
     let engine = read_engine(contents);
     println!("Part 1: {:?}", sum_parts(&engine));
+    println!("Part 2: {:?}", sum_gear_ratios(&engine));
 }
