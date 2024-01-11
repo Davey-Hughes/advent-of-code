@@ -1,4 +1,4 @@
-use std::{collections::BTreeSet, convert::identity, env, fs, process::exit};
+use std::{collections::BTreeSet, env, fs, process::exit};
 
 use pest::{iterators::Pair, Parser};
 use pest_derive::Parser;
