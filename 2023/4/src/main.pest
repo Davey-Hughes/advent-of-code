@@ -1,0 +1,11 @@
+colon          = { ":" }
+card_separator = { SPACE_SEPARATOR* ~ "|" ~ SPACE_SEPARATOR* }
+card_prefix    = { "Card" ~ SPACE_SEPARATOR+ }
+card_ident     = { ASCII_DIGIT+ }
+game_prefix    = { card_prefix ~ card_ident ~ colon ~ SPACE_SEPARATOR+ }
+winning_number = { ASCII_DIGIT+ }
+play_number    = { ASCII_DIGIT+ }
+
+game = { game_prefix ~ winning_number ~ (SPACE_SEPARATOR+ ~ winning_number)* ~ card_separator ~ play_number ~ (SPACE_SEPARATOR+ ~ play_number)* }
+
+file = _{ SOI ~ (game ~ NEWLINE)* ~ EOI }
