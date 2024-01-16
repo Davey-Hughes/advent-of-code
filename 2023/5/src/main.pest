@@ -1,0 +1,15 @@
+seed      =  { ASCII_DIGIT+ }
+seed_line = ${ "seeds:" ~ (SPACE_SEPARATOR+ ~ seed)+ ~ NEWLINE+ }
+
+category = { ASCII_ALPHA+ }
+header   = { category ~ "-to-" ~ category ~ " map:" ~ NEWLINE+ }
+
+destination_start = { ASCII_DIGIT+ }
+source_start      = { ASCII_DIGIT+ }
+range_length      = { ASCII_DIGIT+ }
+mapping           = {
+    destination_start ~ SPACE_SEPARATOR+ ~ source_start ~ SPACE_SEPARATOR+ ~ range_length ~ NEWLINE+
+}
+map_block         = { header ~ mapping+ }
+
+file = _{ SOI ~ seed_line ~ map_block+ ~ EOI }
