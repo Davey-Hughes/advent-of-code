@@ -1,8 +1,8 @@
 WHITESPACE   = _{ SPACE_SEPARATOR }
-instructions =  { ASCII_ALPHA+ }
-key          =  { ASCII_ALPHA+ }
-left         =  { ASCII_ALPHA+ }
-right        =  { ASCII_ALPHA+ }
+instructions =  { ("L" | "R")+ }
+key          =  { ASCII_ALPHANUMERIC+ }
+left         =  { ASCII_ALPHANUMERIC+ }
+right        =  { ASCII_ALPHANUMERIC+ }
 node         =  { key ~ "=" ~ "(" ~ left ~ "," ~ right ~ ")" }
 nodes        = _{ (node ~ NEWLINE+)* }
 network      = _{ instructions ~ NEWLINE+ ~ nodes }
