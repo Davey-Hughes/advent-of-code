@@ -1,0 +1,10 @@
+WHITESPACE   = _{ SPACE_SEPARATOR }
+instructions =  { ASCII_ALPHA+ }
+key          =  { ASCII_ALPHA+ }
+left         =  { ASCII_ALPHA+ }
+right        =  { ASCII_ALPHA+ }
+node         =  { key ~ "=" ~ "(" ~ left ~ "," ~ right ~ ")" }
+nodes        = _{ (node ~ NEWLINE+)* }
+network      = _{ instructions ~ NEWLINE+ ~ nodes }
+
+file = _{ SOI ~ network ~ EOI }
