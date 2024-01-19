@@ -1,4 +1,4 @@
-use std::{collections::BTreeMap, env, fs, process::exit, slice::Iter, thread, time::Duration};
+use std::{collections::BTreeMap, env, fs, process::exit};
 
 use pest::Parser;
 use pest_derive::Parser;
@@ -7,25 +7,48 @@ use pest_derive::Parser;
 #[grammar = "main.pest"]
 struct Day8Parser;
 
-#[derive(Debug)]
+fn gcd(a: u64, b: u64) -> u64 {
+    if b == 0 {
+        return a;
+    }
+
+    gcd(b, a % b)
+}
+
+fn lcm(a: u64, b: u64) -> u64 {
+    a * (b / gcd(a, b))
+}
+
+#[derive(Debug, Default)]
 struct Instructions {
     values: Vec<char>,
+}
+
+struct InstructionsIterator<'a> {
+    instructions: &'a Instructions,
     index: usize,
 }
 
 impl Instructions {
-    fn new(values: Vec<char>) -> Self {
-        Instructions { values, index: 0 }
+    fn new(values: Vec<char>) -> Instructions {
+        Instructions { values }
+    }
+
+    fn iter(&self) -> InstructionsIterator {
+        InstructionsIterator {
+            instructions: self,
+            index: 0,
+        }
     }
 }
 
-impl Iterator for Instructions {
-    type Item = char;
+impl<'a> Iterator for InstructionsIterator<'a> {
+    type Item = &'a char;
 
     fn next(&mut self) -> Option<Self::Item> {
-        let val = Some(self.values[self.index]);
+        let val = Some(&self.instructions.values[self.index]);
 
-        match self.index < self.values.len() - 1 {
+        match self.index < self.instructions.values.len() - 1 {
             true => self.index += 1,
             false => self.index = 0,
         }
@@ -71,18 +94,56 @@ impl Graph {
         Graph { instructions, map }
     }
 
-    fn traverse_part1(&mut self) -> u64 {
-        let mut cur = "AAA";
+    fn traverse_part1(&self, start: &str, cond: fn(&str) -> bool) -> u64 {
+        let mut cur = start;
         let mut num_steps = 0;
 
-        while cur != "ZZZ" {
+        let mut it = self.instructions.iter();
+        while cond(cur) {
             num_steps += 1;
 
-            cur = match self.instructions.next() {
+            cur = match it.next() {
                 Some('L') => self.map.get(cur).unwrap().0.as_str(),
                 Some('R') => self.map.get(cur).unwrap().1.as_str(),
                 _ => cur,
             };
+        }
+
+        num_steps
+    }
+
+    fn traverse_part2(&self) -> u64 {
+        self.map
+            .keys()
+            .filter(|s| s.ends_with('A'))
+            .map(|s| self.traverse_part1(s.as_str(), |s| !s.ends_with('Z')))
+            .reduce(lcm)
+            .unwrap()
+    }
+
+    #[allow(dead_code)]
+    fn traverse_part2_brute_force(&self) -> u64 {
+        let mut curs = self
+            .map
+            .keys()
+            .filter(|s| s.ends_with('A'))
+            .collect::<Vec<_>>();
+
+        let mut num_steps = 0;
+
+        let mut it = self.instructions.iter();
+        while !curs.iter().all(|v| v.ends_with('Z')) {
+            num_steps += 1;
+
+            let instruction = it.next();
+
+            for cur in curs.iter_mut() {
+                *cur = match instruction {
+                    Some('L') => &self.map.get(cur.as_str()).unwrap().0,
+                    Some('R') => &self.map.get(cur.as_str()).unwrap().1,
+                    _ => cur,
+                }
+            }
         }
 
         num_steps
@@ -99,6 +160,8 @@ fn main() {
 
     let contents = fs::read_to_string(&args[1]).expect("Should have been able to read the file");
 
-    let mut graph = Graph::new(&contents);
-    println!("{:?}", graph.traverse_part1());
+    let graph = Graph::new(&contents);
+
+    println!("Part 1: {:?}", graph.traverse_part1("AAA", |s| s != "ZZZ"));
+    println!("Part 2: {:?}", graph.traverse_part2());
 }
