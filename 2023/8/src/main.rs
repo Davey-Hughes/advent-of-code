@@ -30,11 +30,11 @@ struct InstructionsIterator<'a> {
 }
 
 impl Instructions {
-    fn new(values: Vec<char>) -> Instructions {
-        Instructions { values }
+    fn new(values: Vec<char>) -> Self {
+        Self { values }
     }
 
-    fn iter(&self) -> InstructionsIterator {
+    const fn iter(&self) -> InstructionsIterator {
         InstructionsIterator {
             instructions: self,
             index: 0,
@@ -48,9 +48,10 @@ impl<'a> Iterator for InstructionsIterator<'a> {
     fn next(&mut self) -> Option<Self::Item> {
         let val = Some(&self.instructions.values[self.index]);
 
-        match self.index < self.instructions.values.len() - 1 {
-            true => self.index += 1,
-            false => self.index = 0,
+        if self.index < self.instructions.values.len() - 1 {
+            self.index += 1;
+        } else {
+            self.index = 0;
         }
 
         val
@@ -73,7 +74,7 @@ impl Graph {
         for item in file {
             match item.as_rule() {
                 Rule::instructions => {
-                    instructions = Instructions::new(item.as_str().chars().collect())
+                    instructions = Instructions::new(item.as_str().chars().collect());
                 }
                 Rule::node => {
                     let (mut key, mut left, mut right) = ("", "", "");
@@ -91,7 +92,7 @@ impl Graph {
             }
         }
 
-        Graph { instructions, map }
+        Self { instructions, map }
     }
 
     fn traverse_part1(&self, start: &str, cond: fn(&str) -> bool) -> u64 {
@@ -137,7 +138,7 @@ impl Graph {
 
             let instruction = it.next();
 
-            for cur in curs.iter_mut() {
+            for cur in &mut curs {
                 *cur = match instruction {
                     Some('L') => &self.map.get(cur.as_str()).unwrap().0,
                     Some('R') => &self.map.get(cur.as_str()).unwrap().1,
@@ -162,6 +163,6 @@ fn main() {
 
     let graph = Graph::new(&contents);
 
-    println!("Part 1: {:?}", graph.traverse_part1("AAA", |s| s != "ZZZ"));
+    println!("Part 2: {:?}", graph.traverse_part1("AAA", |s| s != "ZZZ"));
     println!("Part 2: {:?}", graph.traverse_part2());
 }
