@@ -116,10 +116,62 @@ impl Grid {
         parity
     }
 
-    // returns the number of tiles enclosed by the loop
-    #[allow(clippy::too_many_lines)]
-    pub fn num_enclosed(&mut self) -> Option<usize> {
+    fn valid_start_directions(&self) -> Vec<(Direction, Index)> {
+        let to_check = &[
+            (
+                Direction::North,
+                Some(self.start.x),
+                self.start.y.checked_sub(1),
+            ),
+            (
+                Direction::East,
+                self.start.x.checked_add(1),
+                Some(self.start.y),
+            ),
+            (
+                Direction::South,
+                Some(self.start.x),
+                self.start.y.checked_add(1),
+            ),
+            (
+                Direction::West,
+                self.start.x.checked_sub(1),
+                Some(self.start.y),
+            ),
+        ];
+
+        let valid = to_check
+            .iter()
+            .filter_map(|v| match v {
+                (d, Some(x), Some(y)) => Some((d, Index { x: *x, y: *y })),
+                (_, None, _) | (_, _, None) => None,
+            })
+            .filter_map(|(d, index)| match (d, self.char_at_index(&index)) {
+                (Direction::North, Some('|' | '7' | 'F'))
+                | (Direction::East, Some('-' | 'J' | '7'))
+                | (Direction::South, Some('|' | 'L' | 'J'))
+                | (Direction::West, Some('-' | 'L' | 'F')) => Some((*d, index)),
+                _ => None,
+            })
+            .collect::<Vec<_>>();
+
+        valid
+    }
+
+    fn next_for_s(&self) -> Option<(Direction, Index, i64)> {
+        let valid = self.valid_start_directions();
+
+        let parity = match valid.iter().map(|v| v.0).collect::<Vec<_>>().as_slice() {
+            [Direction::North, Direction::South] | [Direction::East, Direction::West] => 0,
+            _ => 1,
+        };
+
+        Some((valid.first()?.0, valid.first()?.1, parity))
+    }
+
+    fn num_enclosed_point_in_polygon(&mut self) -> usize {
         #[derive(Debug, Clone, Copy, PartialEq, Eq)]
+        #[allow(dead_code)]
         enum Seen {
             Unknown,
             Pipe,
@@ -127,142 +179,66 @@ impl Grid {
             Outside,
         }
 
-        fn explore(
-            grid: &Grid,
-            seen: &mut [Seen],
-            inside: Option<bool>,
-            index: &Index,
-            inside_directions: &[Direction],
-        ) {
-            let neighbors = &[
-                (Direction::North, (Some(index.x), index.y.checked_sub(1))), // north
-                (Direction::East, (index.x.checked_add(1), Some(index.y))),  // east
-                (Direction::South, (Some(index.x), index.y.checked_add(1))), // south
-                (Direction::West, (index.x.checked_sub(1), Some(index.y))),  // west
-            ];
-
-            let filtered_neighbors = neighbors
-                .iter()
-                .map(|(d, index)| (inside_directions.contains(d), index))
-                .filter_map(|(d, (x, y))| match (d, (x, y)) {
-                    (d, (Some(x), Some(y))) => {
-                        if *x < grid.dimensions.width && *y < grid.dimensions.height {
-                            return Some((d, Index { x: *x, y: *y }));
-                        }
-
-                        None
-                    }
-                    _ => None,
-                });
-
-            for neighbor in filtered_neighbors {
-                let pos = grid.get_pos(&neighbor.1).unwrap();
-                match seen[pos] {
-                    Seen::Pipe | Seen::Inside | Seen::Outside => (),
-                    Seen::Unknown => {
-                        // extracts is_inside if it's not None, otherwise assigns it to the
-                        // neighbor's value
-                        let is_inside = inside.map_or_else(|| neighbor.0, |is_inside| is_inside);
-
-                        if is_inside {
-                            seen[pos] = Seen::Inside;
-                        } else {
-                            seen[pos] = Seen::Outside;
-                        }
-
-                        explore(grid, seen, Some(is_inside), &neighbor.1, inside_directions);
-                    }
-                }
-            }
-        }
+        let s_pipe = match self
+            .valid_start_directions()
+            .iter()
+            .map(|(d, _)| *d)
+            .collect::<Vec<_>>()
+            .as_slice()
+        {
+            [Direction::North, Direction::East] => 'L',
+            [Direction::North, Direction::South] => '|',
+            [Direction::North, Direction::West] => 'J',
+            [Direction::East, Direction::South] => 'F',
+            [Direction::East, Direction::West] => '-',
+            [Direction::South, Direction::West] => '7',
+            _ => panic!("Invalid start directions"),
+        };
 
         let mut seen = vec![Seen::Unknown; self.mmap.len()];
 
         for (_, i, _) in self.iter() {
-            let pos = self.get_pos(&i)?;
+            let pos = self.get_pos(&i).unwrap();
             seen[pos] = Seen::Pipe;
         }
 
-        let grid_parity = self.get_parity();
-        let mut inside_directions = match grid_parity {
-            Parity::Clockwise => vec![Direction::East, Direction::South],
-            Parity::Counterclockwise => vec![Direction::West, Direction::South],
-        };
-
-        let (start_direction, _, _) = next_for_s(self).unwrap();
-        let initial_rotation = match start_direction {
-            Direction::North => 0,
-            Direction::East => 1,
-            Direction::South => 2,
-            Direction::West => 3,
-        };
-
-        for _ in 0..initial_rotation {
-            inside_directions = inside_directions
-                .iter()
-                .map(|d| d.rotate(Parity::Clockwise))
-                .collect();
-        }
-
-        let mut prev_parity = 1;
-        for (_, i, p) in self.iter() {
-            let parity_diff = p - prev_parity;
-            prev_parity = p;
-
-            if parity_diff != 0 {
-                let rotation_direction = match parity_diff {
-                    1 => Parity::Clockwise,
-                    -1 => Parity::Counterclockwise,
-                    _ => panic!("Invalid parity diff"),
-                };
-
-                inside_directions = inside_directions
-                    .iter()
-                    .map(|d| d.rotate(rotation_direction))
-                    .collect();
-            }
-
-            explore(self, &mut seen, None, &i, &inside_directions);
-
-            // println!("{:?}", inside_directions);
-            // for y in 0..self.dimensions.height {
-            //     for x in 0..self.dimensions.width {
-            //         let pos = self.get_pos(&Index { x, y }).unwrap();
-            //         let c = match seen[pos] {
-            //             Seen::Unknown => "U".to_string(),
-            //             Seen::Inside => "I".to_string(),
-            //             Seen::Outside => "O".to_string(),
-            //             Seen::Pipe => {
-            //                 if pos == self.get_pos(&i).unwrap() {
-            //                     format!("\x1b[7m{}\x1b[0m", self.char_at_pos(pos))
-            //                 } else {
-            //                     self.char_at_pos(pos).to_string()
-            //                 }
-            //             }
-            //         };
-            //         print!("{c}");
-            //     }
-            //     println!();
-            // }
-            //
-            // println!();
-        }
+        let mut ret = 0;
 
         for y in 0..self.dimensions.height {
+            let mut inside = false;
             for x in 0..self.dimensions.width {
                 let pos = self.get_pos(&Index { x, y }).unwrap();
-                let c = match seen[pos] {
-                    Seen::Unknown => "U".to_string(),
-                    Seen::Inside => "I".to_string(),
-                    Seen::Outside => "O".to_string(),
-                    Seen::Pipe => self.char_at_pos(pos).to_string(),
+                match seen[pos] {
+                    Seen::Unknown => {
+                        if inside {
+                            ret += 1;
+                        }
+                    }
+
+                    Seen::Inside => panic!("Unexpected inside"),
+                    Seen::Outside => (),
+                    Seen::Pipe => {
+                        let mut c = self.char_at_pos(pos);
+                        if c == 'S' {
+                            c = s_pipe;
+                        }
+                        match (self.get_parity(), c) {
+                            (Parity::Clockwise, 'F' | '7')
+                            | (Parity::Counterclockwise, 'L' | 'J')
+                            | (_, '|') => inside = !inside,
+
+                            _ => (),
+                        }
+                    }
                 };
-                print!("{c}");
             }
-            println!();
         }
 
-        Some(seen.iter().filter(|&c| *c == Seen::Inside).count())
+        ret
+    }
+
+    pub fn num_enclosed(&mut self) -> usize {
+        self.num_enclosed_point_in_polygon()
     }
 
     pub fn new<S: AsRef<str>>(file_name: &S) -> Result<Self, Box<dyn Error>> {
@@ -294,25 +270,6 @@ pub enum Direction {
     West,
 }
 
-impl Direction {
-    const fn rotate(self, parity: Parity) -> Self {
-        match parity {
-            Parity::Clockwise => match self {
-                Self::North => Self::East,
-                Self::East => Self::South,
-                Self::South => Self::West,
-                Self::West => Self::North,
-            },
-            Parity::Counterclockwise => match self {
-                Self::North => Self::West,
-                Self::East => Self::North,
-                Self::South => Self::East,
-                Self::West => Self::South,
-            },
-        }
-    }
-}
-
 const fn calc_next_direction(prev_direction: Direction, pipe: char) -> Option<Direction> {
     match (prev_direction, pipe) {
         (Direction::North, '|') | (Direction::East, 'J') | (Direction::West, 'L') => {
@@ -340,59 +297,12 @@ pub struct GridIterator<'a> {
     parity: i64,
 }
 
-fn next_for_s(grid: &Grid) -> Option<(Direction, Index, i64)> {
-    let to_check = &[
-        (
-            Direction::North,
-            Some(grid.start.x),
-            grid.start.y.checked_sub(1),
-        ),
-        (
-            Direction::East,
-            grid.start.x.checked_add(1),
-            Some(grid.start.y),
-        ),
-        (
-            Direction::South,
-            Some(grid.start.x),
-            grid.start.y.checked_add(1),
-        ),
-        (
-            Direction::West,
-            grid.start.x.checked_sub(1),
-            Some(grid.start.y),
-        ),
-    ];
-
-    let valid = to_check
-        .iter()
-        .filter_map(|v| match v {
-            (d, Some(x), Some(y)) => Some((d, Index { x: *x, y: *y })),
-            (_, None, _) | (_, _, None) => None,
-        })
-        .filter_map(|(d, index)| match (d, grid.char_at_index(&index)) {
-            (Direction::North, Some('|' | '7' | 'F'))
-            | (Direction::East, Some('-' | 'J' | '7'))
-            | (Direction::South, Some('|' | 'L' | 'J'))
-            | (Direction::West, Some('-' | 'L' | 'F')) => Some((*d, index)),
-            _ => None,
-        })
-        .collect::<Vec<_>>();
-
-    let parity = match valid.iter().map(|v| v.0).collect::<Vec<_>>().as_slice() {
-        [Direction::North, Direction::South] | [Direction::East, Direction::West] => 0,
-        _ => 1,
-    };
-
-    Some((valid.first()?.0, valid.first()?.1, parity))
-}
-
 impl<'a> IntoIterator for &'a Grid {
     type Item = (char, Index, i64);
     type IntoIter = GridIterator<'a>;
 
     fn into_iter(self) -> Self::IntoIter {
-        let (next_direction, next_index, parity) = match next_for_s(self) {
+        let (next_direction, next_index, parity) = match self.next_for_s() {
             Some((d, index, p)) => (Some(d), Some(index), p),
             None => (None, None, 0),
         };
@@ -539,7 +449,7 @@ fn main() -> Result<(), Box<dyn Error>> {
 
     let mut grid = Grid::new(&args[1])?;
     println!("Part 1: {}", grid.loop_distance());
-    println!("Part 2: {}", grid.num_enclosed().unwrap());
+    println!("Part 2: {}", grid.num_enclosed());
 
     Ok(())
 }
