@@ -3,7 +3,7 @@ use std::{env, error::Error, fs::File, process::exit};
 
 use memmap2::Mmap;
 
-#[derive(Debug, Copy, Clone)]
+#[derive(Debug, Copy, Clone, Hash, Eq, PartialEq)]
 pub struct Index {
     x: usize,
     y: usize,
@@ -15,6 +15,12 @@ struct Dimensions {
     height: usize,
 }
 
+#[derive(Debug, Copy, Clone, PartialEq, Eq)]
+pub enum Parity {
+    Clockwise = 1,
+    Counterclockwise = -1,
+}
+
 // since the mmap is a newline delimited file, each line is 1 character longer than the width
 // dimension
 #[derive(Debug)]
@@ -22,6 +28,7 @@ pub struct Grid {
     mmap: Mmap,
     dimensions: Dimensions,
     start: Index,
+    parity: Option<Parity>,
 }
 
 impl Grid {
@@ -46,6 +53,9 @@ impl Grid {
         Some(index.x + (index.y * (self.dimensions.width + 1)))
     }
 
+    /// # Panics
+    ///
+    /// Panics if pos is larger than the length of the file
     #[must_use]
     pub fn char_at_pos(&self, pos: usize) -> char {
         assert!(pos < self.mmap.len());
@@ -72,14 +82,187 @@ impl Grid {
 
         Ok(Dimensions { width, height })
     }
+
     #[must_use]
     pub fn iter(&self) -> GridIterator {
         self.into_iter()
     }
-
     #[must_use]
     pub fn loop_distance(&self) -> usize {
         self.iter().count() / 2
+    }
+
+    // positive parity means clockwise
+    // negative parity means counterclockwise
+    #[allow(clippy::cast_possible_truncation)]
+    #[must_use]
+    pub fn get_parity(&mut self) -> Parity {
+        if let Some(parity) = self.parity {
+            return parity;
+        }
+
+        let mut parity = 0;
+        for (_, _, p) in self.iter() {
+            parity = p;
+        }
+
+        let parity = if parity.is_positive() {
+            Parity::Clockwise
+        } else {
+            Parity::Counterclockwise
+        };
+
+        self.parity = Some(parity);
+        parity
+    }
+
+    // returns the number of tiles enclosed by the loop
+    #[allow(clippy::too_many_lines)]
+    pub fn num_enclosed(&mut self) -> Option<usize> {
+        #[derive(Debug, Clone, Copy, PartialEq, Eq)]
+        enum Seen {
+            Unknown,
+            Pipe,
+            Inside,
+            Outside,
+        }
+
+        fn explore(
+            grid: &Grid,
+            seen: &mut [Seen],
+            inside: Option<bool>,
+            index: &Index,
+            inside_directions: &[Direction],
+        ) {
+            let neighbors = &[
+                (Direction::North, (Some(index.x), index.y.checked_sub(1))), // north
+                (Direction::East, (index.x.checked_add(1), Some(index.y))),  // east
+                (Direction::South, (Some(index.x), index.y.checked_add(1))), // south
+                (Direction::West, (index.x.checked_sub(1), Some(index.y))),  // west
+            ];
+
+            let filtered_neighbors = neighbors
+                .iter()
+                .map(|(d, index)| (inside_directions.contains(d), index))
+                .filter_map(|(d, (x, y))| match (d, (x, y)) {
+                    (d, (Some(x), Some(y))) => {
+                        if *x < grid.dimensions.width && *y < grid.dimensions.height {
+                            return Some((d, Index { x: *x, y: *y }));
+                        }
+
+                        None
+                    }
+                    _ => None,
+                });
+
+            for neighbor in filtered_neighbors {
+                let pos = grid.get_pos(&neighbor.1).unwrap();
+                match seen[pos] {
+                    Seen::Pipe | Seen::Inside | Seen::Outside => (),
+                    Seen::Unknown => {
+                        // extracts is_inside if it's not None, otherwise assigns it to the
+                        // neighbor's value
+                        let is_inside = inside.map_or_else(|| neighbor.0, |is_inside| is_inside);
+
+                        if is_inside {
+                            seen[pos] = Seen::Inside;
+                        } else {
+                            seen[pos] = Seen::Outside;
+                        }
+
+                        explore(grid, seen, Some(is_inside), &neighbor.1, inside_directions);
+                    }
+                }
+            }
+        }
+
+        let mut seen = vec![Seen::Unknown; self.mmap.len()];
+
+        for (_, i, _) in self.iter() {
+            let pos = self.get_pos(&i)?;
+            seen[pos] = Seen::Pipe;
+        }
+
+        let grid_parity = self.get_parity();
+        let mut inside_directions = match grid_parity {
+            Parity::Clockwise => vec![Direction::East, Direction::South],
+            Parity::Counterclockwise => vec![Direction::West, Direction::South],
+        };
+
+        let (start_direction, _, _) = next_for_s(self).unwrap();
+        let initial_rotation = match start_direction {
+            Direction::North => 0,
+            Direction::East => 1,
+            Direction::South => 2,
+            Direction::West => 3,
+        };
+
+        for _ in 0..initial_rotation {
+            inside_directions = inside_directions
+                .iter()
+                .map(|d| d.rotate(Parity::Clockwise))
+                .collect();
+        }
+
+        let mut prev_parity = 1;
+        for (_, i, p) in self.iter() {
+            let parity_diff = p - prev_parity;
+            prev_parity = p;
+
+            if parity_diff != 0 {
+                let rotation_direction = match parity_diff {
+                    1 => Parity::Clockwise,
+                    -1 => Parity::Counterclockwise,
+                    _ => panic!("Invalid parity diff"),
+                };
+
+                inside_directions = inside_directions
+                    .iter()
+                    .map(|d| d.rotate(rotation_direction))
+                    .collect();
+            }
+
+            explore(self, &mut seen, None, &i, &inside_directions);
+
+            // println!("{:?}", inside_directions);
+            // for y in 0..self.dimensions.height {
+            //     for x in 0..self.dimensions.width {
+            //         let pos = self.get_pos(&Index { x, y }).unwrap();
+            //         let c = match seen[pos] {
+            //             Seen::Unknown => "U".to_string(),
+            //             Seen::Inside => "I".to_string(),
+            //             Seen::Outside => "O".to_string(),
+            //             Seen::Pipe => {
+            //                 if pos == self.get_pos(&i).unwrap() {
+            //                     format!("\x1b[7m{}\x1b[0m", self.char_at_pos(pos))
+            //                 } else {
+            //                     self.char_at_pos(pos).to_string()
+            //                 }
+            //             }
+            //         };
+            //         print!("{c}");
+            //     }
+            //     println!();
+            // }
+            //
+            // println!();
+        }
+
+        for y in 0..self.dimensions.height {
+            for x in 0..self.dimensions.width {
+                let pos = self.get_pos(&Index { x, y }).unwrap();
+                let c = match seen[pos] {
+                    Seen::Unknown => "U".to_string(),
+                    Seen::Inside => "I".to_string(),
+                    Seen::Outside => "O".to_string(),
+                    Seen::Pipe => self.char_at_pos(pos).to_string(),
+                };
+                print!("{c}");
+            }
+            println!();
+        }
+
+        Some(seen.iter().filter(|&c| *c == Seen::Inside).count())
     }
 
     pub fn new<S: AsRef<str>>(file_name: &S) -> Result<Self, Box<dyn Error>> {
@@ -98,16 +281,36 @@ impl Grid {
             mmap,
             dimensions,
             start,
+            parity: None,
         })
     }
 }
 
-#[derive(Debug, Copy, Clone)]
-enum Direction {
+#[derive(Debug, Copy, Clone, PartialEq, Eq)]
+pub enum Direction {
     North,
     East,
     South,
     West,
+}
+
+impl Direction {
+    const fn rotate(self, parity: Parity) -> Self {
+        match parity {
+            Parity::Clockwise => match self {
+                Self::North => Self::East,
+                Self::East => Self::South,
+                Self::South => Self::West,
+                Self::West => Self::North,
+            },
+            Parity::Counterclockwise => match self {
+                Self::North => Self::West,
+                Self::East => Self::North,
+                Self::South => Self::East,
+                Self::West => Self::South,
+            },
+        }
+    }
 }
 
 const fn calc_next_direction(prev_direction: Direction, pipe: char) -> Option<Direction> {
@@ -134,9 +337,10 @@ pub struct GridIterator<'a> {
     index: Index,
     next_index: Option<Index>,
     next_direction: Option<Direction>,
+    parity: i64,
 }
 
-fn next_for_s(grid: &Grid) -> Option<(Direction, Index)> {
+fn next_for_s(grid: &Grid) -> Option<(Direction, Index, i64)> {
     let to_check = &[
         (
             Direction::North,
@@ -160,7 +364,7 @@ fn next_for_s(grid: &Grid) -> Option<(Direction, Index)> {
         ),
     ];
 
-    let mut valid = to_check
+    let valid = to_check
         .iter()
         .filter_map(|v| match v {
             (d, Some(x), Some(y)) => Some((d, Index { x: *x, y: *y })),
@@ -172,19 +376,25 @@ fn next_for_s(grid: &Grid) -> Option<(Direction, Index)> {
             | (Direction::South, Some('|' | 'L' | 'J'))
             | (Direction::West, Some('-' | 'L' | 'F')) => Some((*d, index)),
             _ => None,
-        });
+        })
+        .collect::<Vec<_>>();
 
-    valid.next()
+    let parity = match valid.iter().map(|v| v.0).collect::<Vec<_>>().as_slice() {
+        [Direction::North, Direction::South] | [Direction::East, Direction::West] => 0,
+        _ => 1,
+    };
+
+    Some((valid.first()?.0, valid.first()?.1, parity))
 }
 
 impl<'a> IntoIterator for &'a Grid {
-    type Item = char;
+    type Item = (char, Index, i64);
     type IntoIter = GridIterator<'a>;
 
     fn into_iter(self) -> Self::IntoIter {
-        let (next_direction, next_index) = match next_for_s(self) {
-            Some((d, index)) => (Some(d), Some(index)),
-            None => (None, None),
+        let (next_direction, next_index, parity) = match next_for_s(self) {
+            Some((d, index, p)) => (Some(d), Some(index), p),
+            None => (None, None, 0),
         };
 
         GridIterator {
@@ -192,88 +402,121 @@ impl<'a> IntoIterator for &'a Grid {
             index: self.start,
             next_index,
             next_direction,
+            parity,
         }
     }
 }
 
 impl<'a> Iterator for GridIterator<'a> {
-    type Item = char;
+    type Item = (char, Index, i64);
 
-    fn next(&mut self) -> Option<char> {
-        let ret = self.grid.char_at_index(&self.index);
+    fn next(&mut self) -> Option<(char, Index, i64)> {
+        let ret_char = self.grid.char_at_index(&self.index);
 
-        let next_index = self.next_index?;
-        let next_direction = self.next_direction?;
-        let next_char = self.grid.char_at_index(&next_index)?;
+        let cur_index = self.next_index?;
+        let cur_direction = self.next_direction?;
+        let cur_char = self.grid.char_at_index(&cur_index)?;
 
-        self.next_index = match (next_direction, next_char) {
+        self.next_index = match (cur_direction, cur_char) {
             (Direction::North, '|') => Some(Index {
-                x: next_index.x,
-                y: next_index.y.checked_sub(1)?,
+                x: cur_index.x,
+                y: cur_index.y.checked_sub(1)?,
             }),
 
-            (Direction::North, 'F') => Some(Index {
-                x: next_index.x.checked_add(1)?,
-                y: next_index.y,
-            }),
+            (Direction::North, 'F') => {
+                self.parity += 1;
 
-            (Direction::North, '7') => Some(Index {
-                x: next_index.x.checked_sub(1)?,
-                y: next_index.y,
-            }),
+                Some(Index {
+                    x: cur_index.x.checked_add(1)?,
+                    y: cur_index.y,
+                })
+            }
+
+            (Direction::North, '7') => {
+                self.parity -= 1;
+
+                Some(Index {
+                    x: cur_index.x.checked_sub(1)?,
+                    y: cur_index.y,
+                })
+            }
 
             (Direction::East, '-') => Some(Index {
-                x: next_index.x.checked_add(1)?,
-                y: next_index.y,
+                x: cur_index.x.checked_add(1)?,
+                y: cur_index.y,
             }),
 
-            (Direction::East, '7') => Some(Index {
-                x: next_index.x,
-                y: next_index.y.checked_add(1)?,
-            }),
+            (Direction::East, '7') => {
+                self.parity += 1;
 
-            (Direction::East, 'J') => Some(Index {
-                x: next_index.x,
-                y: next_index.y.checked_sub(1)?,
-            }),
+                Some(Index {
+                    x: cur_index.x,
+                    y: cur_index.y.checked_add(1)?,
+                })
+            }
+
+            (Direction::East, 'J') => {
+                self.parity -= 1;
+
+                Some(Index {
+                    x: cur_index.x,
+                    y: cur_index.y.checked_sub(1)?,
+                })
+            }
 
             (Direction::South, '|') => Some(Index {
-                x: next_index.x,
-                y: next_index.y.checked_add(1)?,
+                x: cur_index.x,
+                y: cur_index.y.checked_add(1)?,
             }),
 
-            (Direction::South, 'L') => Some(Index {
-                x: next_index.x.checked_add(1)?,
-                y: next_index.y,
-            }),
+            (Direction::South, 'J') => {
+                self.parity += 1;
 
-            (Direction::South, 'J') => Some(Index {
-                x: next_index.x.checked_sub(1)?,
-                y: next_index.y,
-            }),
+                Some(Index {
+                    x: cur_index.x.checked_sub(1)?,
+                    y: cur_index.y,
+                })
+            }
+
+            (Direction::South, 'L') => {
+                self.parity -= 1;
+
+                Some(Index {
+                    x: cur_index.x.checked_add(1)?,
+                    y: cur_index.y,
+                })
+            }
 
             (Direction::West, '-') => Some(Index {
-                x: next_index.x.checked_sub(1)?,
-                y: next_index.y,
+                x: cur_index.x.checked_sub(1)?,
+                y: cur_index.y,
             }),
 
-            (Direction::West, 'F') => Some(Index {
-                x: next_index.x,
-                y: next_index.y.checked_add(1)?,
-            }),
+            (Direction::West, 'L') => {
+                self.parity += 1;
 
-            (Direction::West, 'L') => Some(Index {
-                x: next_index.x,
-                y: next_index.y.checked_sub(1)?,
-            }),
+                Some(Index {
+                    x: cur_index.x,
+                    y: cur_index.y.checked_sub(1)?,
+                })
+            }
+
+            (Direction::West, 'F') => {
+                self.parity -= 1;
+
+                Some(Index {
+                    x: cur_index.x,
+                    y: cur_index.y.checked_add(1)?,
+                })
+            }
 
             (_, _) => None,
         };
 
-        self.next_direction = calc_next_direction(self.next_direction?, next_char);
-        self.index = next_index;
+        self.next_direction = calc_next_direction(self.next_direction?, cur_char);
+        self.index = cur_index;
 
-        ret
+        Some((ret_char?, cur_index, self.parity))
     }
 }
 
@@ -294,11 +537,9 @@ fn main() -> Result<(), Box<dyn Error>> {
         exit(1);
     }
 
-    let grid = Grid::new(&args[1])?;
-    // println!("{grid}");
-
-    grid.into_iter();
+    let mut grid = Grid::new(&args[1])?;
     println!("Part 1: {}", grid.loop_distance());
+    println!("Part 2: {}", grid.num_enclosed().unwrap());
 
     Ok(())
 }
