@@ -38,6 +38,23 @@ fn calc(ints: &mut [usize]) -> &[usize] {
     ints
 }
 
+fn part2_brute_force(ints: &[usize]) -> Option<usize> {
+    let mut buffer = vec![0; ints.len()];
+    for noun in 0..100 {
+        for verb in 0..100 {
+            buffer.copy_from_slice(&ints[0..]);
+            buffer[1] = noun;
+            buffer[2] = verb;
+
+            if *calc(&mut buffer).first().unwrap() == 19_690_720 {
+                return Some(100 * noun + verb);
+            };
+        }
+    }
+
+    None
+}
+
 #[allow(dead_code)]
 fn print_ints(ints: &[usize], cur_line: usize) {
     let mut i = 0;
@@ -80,6 +97,9 @@ fn main() -> Result<(), Box<dyn Error>> {
             .first()
             .ok_or("Couldn't get position 0 after calculation")?
     );
+
+    let ints = parse_input(&contents)?;
+    println!("Part 2: {:?}", part2_brute_force(&ints).unwrap());
 
     Ok(())
 }
