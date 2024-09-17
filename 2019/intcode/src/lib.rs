@@ -1,5 +1,5 @@
 use core::fmt;
-use std::{error::Error, fs};
+use std::{collections::VecDeque, error::Error, fs};
 
 #[derive(Debug, Default, PartialEq)]
 enum ModeOpt {
@@ -23,7 +23,7 @@ impl TryFrom<u32> for ModeOpt {
 enum Opcode {
     Add = 1,
     Mul = 2,
-    Mov = 3,
+    In = 3,
     Out = 4,
     Halt = 99,
 }
@@ -31,8 +31,8 @@ enum Opcode {
 impl Opcode {
     const fn len(&self) -> usize {
         match self {
-            Self::Add | Self::Mul => 3,
-            Self::Mov | Self::Out => 2,
+            Self::Add | Self::Mul => 4,
+            Self::In | Self::Out => 2,
             Self::Halt => 1,
         }
     }
@@ -44,7 +44,7 @@ impl TryFrom<u32> for Opcode {
         match value {
             1 => Ok(Self::Add),
             2 => Ok(Self::Mul),
-            3 => Ok(Self::Mov),
+            3 => Ok(Self::In),
             4 => Ok(Self::Out),
             99 => Ok(Self::Halt),
             _ => Err("Invalid opcode"),
@@ -78,6 +78,7 @@ impl Instruction {
 
         let modes = chars[0..3]
             .iter()
+            .rev()
             .map(|c| c.to_digit(10))
             .collect::<Option<Vec<_>>>()
             .ok_or("Error converting modes to digits")?
@@ -105,7 +106,7 @@ impl fmt::Display for Instruction {
 
         let mut params = vec![];
 
-        for (i, p) in self.parameters.iter().enumerate() {
+        for (i, p) in self.parameters[1..].iter().enumerate() {
             let brackets = if self.modes[i] == ModeOpt::Position {
                 ("[", "]")
             } else {
@@ -121,9 +122,9 @@ impl fmt::Display for Instruction {
     }
 }
 
-#[derive(Debug)]
 pub struct Interpreter {
     program: Vec<i64>,
+    input: VecDeque<i64>,
     output: Vec<i64>,
 
     pc: usize,
@@ -141,14 +142,81 @@ impl Interpreter {
             .collect::<Result<Vec<_>, _>>()?)
     }
 
-    pub fn from_file(file: &str) -> Result<Self, Box<dyn Error>> {
+    pub fn from_file(file: &str, input: Vec<i64>) -> Result<Self, Box<dyn Error>> {
         let contents = fs::read_to_string(file)?;
 
         Ok(Self {
             program: Self::parse_input(&contents)?,
+            input: VecDeque::from(input),
             output: vec![],
             pc: 0,
         })
+    }
+
+    pub fn output(&self) -> &[i64] {
+        &self.output
+    }
+
+    pub fn exec_one(&mut self) -> Result<Option<Vec<i64>>, Box<dyn Error>> {
+        let ins = Instruction::new(&self.program, self.pc)?;
+        let params = &ins.parameters[1..];
+
+        let get_param_value = |i| -> Result<i64, Box<dyn Error>> {
+            Ok(
+                match ins.modes.get(i).ok_or("Index doesn't exist for mode")? {
+                    ModeOpt::Position => self.program[usize::try_from(params[i])?],
+                    ModeOpt::Immediate => params[i],
+                },
+            )
+        };
+
+        match ins.opcode {
+            Opcode::Add => {
+                self.program[usize::try_from(params[2])?] =
+                    get_param_value(0)? + get_param_value(1)?;
+            }
+            Opcode::Mul => {
+                self.program[usize::try_from(params[2])?] =
+                    get_param_value(0)? * get_param_value(1)?;
+            }
+            Opcode::In => {
+                self.program[usize::try_from(params[0])?] = self
+                    .input
+                    .pop_front()
+                    .ok_or("No input for In instruction")?;
+            }
+            Opcode::Out => {
+                self.output.push(self.program[usize::try_from(params[0])?]);
+            }
+            Opcode::Halt => return Ok(Some(self.output.clone())),
+        }
+
+        self.pc += ins.opcode.len();
+
+        Ok(None)
+    }
+
+    pub fn exec(&mut self) -> Result<Vec<i64>, Box<dyn Error>> {
+        while self.pc < self.program.len() {
+            if let Some(output) = self.exec_one()? {
+                return Ok(output);
+            }
+        }
+        Err("Program did not halt")?
+    }
+}
+impl fmt::Debug for Interpreter {
+    fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
+        writeln!(f, "input:\t{:?}", self.input)?;
+        writeln!(f, "output:\t{:?}", self.output)?;
+        writeln!(f, "pc:\t{:?}", self.pc)?;
+
+        writeln!(f, "\nprogram: ")?;
+        for chunk in self.program.chunks(16) {
+            writeln!(f, "\t{chunk:?}")?;
+        }
+
+        Ok(())
     }
 }
 
@@ -164,6 +232,10 @@ impl fmt::Display for Interpreter {
                 )?;
                 break;
             };
+
+            if addr == self.pc {
+                write!(f, "> ")?;
+            }
 
             writeln!(f, "{addr:#08x}:\t{ins}")?;
             addr += ins.opcode.len();
