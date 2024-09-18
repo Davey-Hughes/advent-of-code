@@ -1,9 +1,10 @@
 use std::{
-    collections::{BTreeMap, BTreeSet},
+    collections::{BTreeMap, BTreeSet, VecDeque},
     env,
     error::Error,
     fs,
     process::exit,
+    rc::Rc,
 };
 
 fn parse_input(file_string: &str) -> Result<BTreeMap<&str, Vec<&str>>, Box<dyn Error>> {
@@ -29,13 +30,13 @@ fn parse_input(file_string: &str) -> Result<BTreeMap<&str, Vec<&str>>, Box<dyn E
 fn part_1(orbits: &BTreeMap<&str, Vec<&str>>, start: &str) -> usize {
     fn dfs<'a>(
         orbits: &BTreeMap<&str, Vec<&'a str>>,
-        start: &'a str,
+        curr: &'a str,
         seen: &mut BTreeSet<&'a str>,
         depth: usize,
     ) -> usize {
-        seen.insert(start);
+        seen.insert(curr);
 
-        orbits.get(start).map_or(depth, |nodes| {
+        orbits.get(curr).map_or(depth, |nodes| {
             nodes
                 .iter()
                 .map(|node| {
@@ -52,6 +53,39 @@ fn part_1(orbits: &BTreeMap<&str, Vec<&str>>, start: &str) -> usize {
     dfs(orbits, start, &mut BTreeSet::new(), 0)
 }
 
+// adapted from: https://stackoverflow.com/a/71190546
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub struct SearchPath<N>(N, Option<Rc<SearchPath<N>>>);
+
+impl<N> SearchPath<N> {
+    fn len(&self) -> usize {
+        self.1.as_ref().map_or(1, |path| 1 + path.len())
+    }
+}
+
+fn part_2(orbits: &BTreeMap<&str, Vec<&str>>, start: &str, end: &str) -> Option<usize> {
+    let mut visited: BTreeSet<&str> = BTreeSet::new();
+    let mut queue = VecDeque::new();
+
+    queue.push_back(SearchPath(start, None));
+    while let Some(SearchPath(node, path)) = queue.pop_front() {
+        if node == end {
+            return Some(SearchPath(node, path).len() - 3);
+        }
+
+        let path = Rc::new(SearchPath(node, path.clone()));
+
+        for edge in orbits.get(node).unwrap_or(&vec![]) {
+            if !visited.contains(edge) {
+                visited.insert(edge);
+                queue.push_back(SearchPath(edge, Some(path.clone())));
+            }
+        }
+    }
+
+    None
+}
+
 fn main() -> Result<(), Box<dyn Error>> {
     let args: Vec<String> = env::args().collect();
 
@@ -64,6 +98,10 @@ fn main() -> Result<(), Box<dyn Error>> {
     let orbits = parse_input(&contents)?;
 
     println!("Part 1: {:?}", part_1(&orbits, "COM"));
+    println!(
+        "Part 2: {:?}",
+        part_2(&orbits, "YOU", "SAN").ok_or("No path found from 'YOU' to 'SAN'")?
+    );
 
     Ok(())
 }
