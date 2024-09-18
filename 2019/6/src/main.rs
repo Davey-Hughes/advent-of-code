@@ -13,7 +13,11 @@ fn parse_input(file_string: &str) -> Result<BTreeMap<&str, Vec<&str>>, Box<dyn E
         .lines()
         .map(|s| s.split(')'))
         .map(|mut x| -> Option<()> {
-            map.entry(x.next()?).or_default().push(x.next()?);
+            let first = x.next()?;
+            let second = x.next()?;
+            map.entry(first).or_default().push(second);
+            map.entry(second).or_default().push(first);
+
             Some(())
         })
         .collect::<Option<_>>()
@@ -23,16 +27,29 @@ fn parse_input(file_string: &str) -> Result<BTreeMap<&str, Vec<&str>>, Box<dyn E
 }
 
 fn part_1(orbits: &BTreeMap<&str, Vec<&str>>, start: &str) -> usize {
-    fn traverse(orbits: &BTreeMap<&str, Vec<&str>>, start: &str, depth: usize) -> usize {
-        orbits.get(start).map_or(depth, |x| {
-            x.iter()
-                .map(|y| traverse(orbits, y, depth + 1))
+    fn dfs<'a>(
+        orbits: &BTreeMap<&str, Vec<&'a str>>,
+        start: &'a str,
+        seen: &mut BTreeSet<&'a str>,
+        depth: usize,
+    ) -> usize {
+        seen.insert(start);
+
+        orbits.get(start).map_or(depth, |nodes| {
+            nodes
+                .iter()
+                .map(|node| {
+                    if seen.contains(node) {
+                        depth
+                    } else {
+                        dfs(orbits, node, seen, depth + 1)
+                    }
+                })
                 .sum::<usize>()
-                + depth
         })
     }
 
-    traverse(orbits, start, 0)
+    dfs(orbits, start, &mut BTreeSet::new(), 0)
 }
 
 fn main() -> Result<(), Box<dyn Error>> {
