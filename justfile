@@ -1,6 +1,6 @@
 set unstable := true
 
-build *FLAGS:
+build:
     #!/bin/bash
 
     sols=$(find . -type d -iregex "./20[0-9]\{2\}/[0-9]\{2\}" -exec realpath {} \; | sort -u)
@@ -9,7 +9,7 @@ build *FLAGS:
       pushd $d > /dev/null;
 
       if [ -f "Cargo.toml" ]; then
-        cargo build {{FLAGS}};
+        cargo build --release;
       fi
 
       popd $d > /dev/null;
@@ -30,10 +30,11 @@ clean:
       popd $d > /dev/null;
     done
 
-run INPUT-DIR *FLAGS:
+run INPUT-DIR YEAR="20[0-9]\\{2\\}" DAY="[0-9]\\{2\\}":
     #!/bin/bash
 
-    sols=$(find . -type d -iregex "./20[0-9]\{2\}/[0-9]\{2\}" -exec realpath {} \; | sort -u)
+
+    sols=$(find . -type d -iregex "./{{YEAR}}/{{DAY}}" -exec realpath {} \; | sort -u)
 
     for d in $sols; do
       year=$(basename $(dirname $d));
@@ -44,7 +45,7 @@ run INPUT-DIR *FLAGS:
       pushd $d> /dev/null;
 
       output=""
-      lines=$(cargo run --quiet {{FLAGS}} $input_file)
+      lines=$(cargo run --quiet --release $input_file)
       if [ -f "Cargo.toml" ]; then
         while read line; do
           output+="$(echo $line | cut -d':' -f2 | xargs)\n";
