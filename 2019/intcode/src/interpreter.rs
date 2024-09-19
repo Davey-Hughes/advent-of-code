@@ -63,7 +63,7 @@ impl Interpreter {
     /// # Panics
     ///
     /// Panics if the input channel is closed but the program expected input
-    pub async fn exec_one(&mut self) -> Result<Option<()>, Box<dyn Error>> {
+    pub async fn exec_one(&mut self) -> Result<Option<i64>, Box<dyn Error>> {
         let ins = Instruction::new(&self.program, self.pc)?;
         let params = &ins.parameters[1..];
 
@@ -126,7 +126,8 @@ impl Interpreter {
                 // manually drops the input and output senders
                 self.input.tx = None;
                 self.output.tx = None;
-                return Ok(Some(()));
+
+                return Ok(Some(0));
             }
         }
 
@@ -162,7 +163,7 @@ impl fmt::Debug for Interpreter {
 impl fmt::Display for Interpreter {
     fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
         let mut addr = 0;
-        loop {
+        while addr < self.program.len() {
             let Ok(ins) = Instruction::new(&self.program, addr) else {
                 writeln!(
                     f,
@@ -189,10 +190,6 @@ impl fmt::Display for Interpreter {
 
             writeln!(f, "{addr:08x}:\t{ins}")?;
             addr += ins.opcode.len();
-
-            if addr >= self.program.len() || ins.opcode == Opcode::Halt {
-                break;
-            }
         }
 
         Ok(())

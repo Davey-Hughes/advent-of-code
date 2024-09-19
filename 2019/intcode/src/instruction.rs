@@ -33,6 +33,10 @@ impl Instruction {
             .map(TryInto::try_into)
             .collect::<Result<Vec<_>, _>>()?;
 
+        if (addr + opcode.len()) >= program.len() {
+            return Err("Program does not contain enough data for the instruction.")?;
+        }
+
         let parameters = program[addr..addr + opcode.len()].to_vec();
 
         Ok(Self {
