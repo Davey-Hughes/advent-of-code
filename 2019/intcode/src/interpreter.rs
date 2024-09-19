@@ -1,12 +1,19 @@
 use crate::instruction::Instruction;
 use crate::opcode::{ModeOpt, Opcode};
 use core::fmt;
-use std::{collections::VecDeque, error::Error, fs};
+use std::{error::Error, fs};
+use tokio::sync::mpsc;
+
+struct IO {
+    rx: mpsc::Receiver<i64>,
+    tx: Option<mpsc::Sender<i64>>,
+    history: Vec<i64>,
+}
 
 pub struct Interpreter {
     program: Vec<i64>,
-    input: VecDeque<i64>,
-    output: Vec<i64>,
+    input: IO,
+    output: IO,
 
     pc: usize,
 }
@@ -23,23 +30,40 @@ impl Interpreter {
             .collect::<Result<Vec<_>, _>>()?)
     }
 
-    pub fn from_file(file: &str, input: Vec<i64>) -> Result<Self, Box<dyn Error>> {
+    pub async fn from_file(file: &str, input: Vec<i64>) -> Result<Self, Box<dyn Error>> {
         let contents = fs::read_to_string(file)?;
+        let (output_tx, output_rx) = mpsc::channel(32);
+        let (input_tx, input_rx) = mpsc::channel(32);
+
+        for i in input.clone() {
+            input_tx.send(i).await?;
+        }
 
         Ok(Self {
             program: Self::parse_input(&contents)?,
-            input: VecDeque::from(input),
-            output: vec![],
+            input: IO {
+                rx: input_rx,
+                tx: Some(input_tx),
+                history: input,
+            },
+            output: IO {
+                rx: output_rx,
+                tx: Some(output_tx),
+                history: vec![],
+            },
             pc: 0,
         })
     }
 
     #[must_use]
-    pub fn output(&self) -> &[i64] {
-        &self.output
+    pub async fn output(&mut self) -> Option<i64> {
+        self.output.rx.recv().await
     }
 
-    pub fn exec_one(&mut self) -> Result<Option<Vec<i64>>, Box<dyn Error>> {
+    /// # Panics
+    ///
+    /// Panics if the input channel is closed but the program expected input
+    pub async fn exec_one(&mut self) -> Result<Option<()>, Box<dyn Error>> {
         let ins = Instruction::new(&self.program, self.pc)?;
         let params = &ins.parameters[1..];
 
@@ -62,13 +86,21 @@ impl Interpreter {
                     get_param_value(0)? * get_param_value(1)?;
             }
             Opcode::In => {
-                self.program[usize::try_from(params[0])?] = self
-                    .input
-                    .pop_front()
-                    .ok_or("No input for In instruction")?;
+                if let Some(message) = self.input.rx.recv().await {
+                    self.program[usize::try_from(params[0])?] = message;
+                } else {
+                    panic!("Input channel closed but program expects input");
+                }
             }
             Opcode::Out => {
-                self.output.push(self.program[usize::try_from(params[0])?]);
+                let message = self.program[usize::try_from(params[0])?];
+                self.output
+                    .tx
+                    .as_mut()
+                    .ok_or("Tried to output when program already halted")?
+                    .send(message)
+                    .await?;
+                self.output.history.push(message);
             }
             Opcode::Jt => {
                 if get_param_value(0)? != 0 {
@@ -90,7 +122,12 @@ impl Interpreter {
                 let val = i64::from(get_param_value(0)? == get_param_value(1)?);
                 self.program[usize::try_from(params[2])?] = val;
             }
-            Opcode::Halt => return Ok(Some(self.output.clone())),
+            Opcode::Halt => {
+                // manually drops the input and output senders
+                self.input.tx = None;
+                self.output.tx = None;
+                return Ok(Some(()));
+            }
         }
 
         self.pc += ins.opcode.len();
@@ -98,10 +135,10 @@ impl Interpreter {
         Ok(None)
     }
 
-    pub fn exec(&mut self) -> Result<Vec<i64>, Box<dyn Error>> {
+    pub async fn exec(&mut self) -> Result<(), Box<dyn Error>> {
         while self.pc < self.program.len() {
-            if let Some(output) = self.exec_one()? {
-                return Ok(output);
+            if let Some(_output) = self.exec_one().await? {
+                return Ok(());
             }
         }
         Err("Program did not halt")?
@@ -109,8 +146,8 @@ impl Interpreter {
 }
 impl fmt::Debug for Interpreter {
     fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
-        writeln!(f, "input:\t{:?}", self.input)?;
-        writeln!(f, "output:\t{:?}", self.output)?;
+        writeln!(f, "input:\t{:?}", self.input.history)?;
+        writeln!(f, "output:\t{:?}", self.output.history)?;
         writeln!(f, "pc:\t{:?}", self.pc)?;
 
         writeln!(f, "\nprogram: ")?;

@@ -5,3 +5,4 @@ edition = "2021"
 
 [dependencies]
 num_enum = "0.7.3"
+tokio = { version = "1.40.0", features = ["sync"] }
