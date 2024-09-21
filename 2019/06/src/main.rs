@@ -21,7 +21,7 @@ fn parse_input(file_string: &str) -> Result<BTreeMap<&str, Vec<&str>>, Box<dyn E
 
             Some(())
         })
-        .collect::<Option<_>>()
+        .collect::<Option<()>>()
         .ok_or("Could not parse input")?;
 
     Ok(map)
