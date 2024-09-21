@@ -3,7 +3,11 @@ set unstable := true
 build:
     #!/bin/bash
 
-    sols=$(find . -type d -iregex "./20[0-9]\{2\}/[0-9]\{2\}" -exec realpath {} \; | sort -u)
+    if [ {{os()}} = "linux" ]; then
+      sols=$(find . -type d -regextype sed -iregex "./20[0-9]\{2\}/[0-9]\{2\}" -exec realpath {} \; | sort -u)
+    elif [ {{os()}} = "macos" ]; then
+      sols=$(find . -type d -iregex "./20[0-9]\{2\}/[0-9]\{2\}" -exec realpath {} \; | sort -u)
+    fi
 
     for d in $sols; do
       pushd $d > /dev/null;
@@ -12,13 +16,17 @@ build:
         cargo build --release;
       fi
 
-      popd $d > /dev/null;
+      popd > /dev/null;
     done
 
 clean:
     #!/bin/bash
 
-    sols=$(find . -type d -iregex "./20[0-9]\{2\}/[0-9]\{2\}" -exec realpath {} \; | sort -u)
+    if [ {{os()}} = "linux" ]; then
+      sols=$(find . -type d -regextype sed -iregex "./20[0-9]\{2\}/[0-9]\{2\}" -exec realpath {} \; | sort -u)
+    elif [ {{os()}} = "macos" ]; then
+      sols=$(find . -type d -iregex "./20[0-9]\{2\}/[0-9]\{2\}" -exec realpath {} \; | sort -u)
+    fi
 
     for d in $sols; do
       pushd $d > /dev/null;
@@ -27,14 +35,17 @@ clean:
         cargo clean;
       fi
 
-      popd $d > /dev/null;
+      popd > /dev/null;
     done
 
 run INPUT-DIR YEAR="20[0-9]\\{2\\}" DAY="[0-9]\\{2\\}":
     #!/bin/bash
 
-
-    sols=$(find . -type d -iregex "./{{YEAR}}/{{DAY}}" -exec realpath {} \; | sort -u)
+    if [ {{os()}} = "linux" ]; then
+      sols=$(find . -type d -regextype sed -iregex "./{{YEAR}}/{{DAY}}" -exec realpath {} \; | sort -u)
+    elif [ {{os()}} = "macos" ]; then
+      sols=$(find . -type d -iregex "./{{YEAR}}/{{DAY}}" -exec realpath {} \; | sort -u)
+    fi
 
     for d in $sols; do
       year=$(basename $(dirname $d));
@@ -53,10 +64,6 @@ run INPUT-DIR YEAR="20[0-9]\\{2\\}" DAY="[0-9]\\{2\\}":
 
       fi
 
-      # echo $d;
-      # echo -e $output;
-      # echo "";
-
       if out_diff=$(echo -e ${output%??} | diff $output_file -); then
         echo $year-$day ✅;
       else
@@ -64,5 +71,5 @@ run INPUT-DIR YEAR="20[0-9]\\{2\\}" DAY="[0-9]\\{2\\}":
         echo "$out_diff";
       fi
 
-      popd $d > /dev/null;
+      popd > /dev/null;
     done
