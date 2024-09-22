@@ -39,7 +39,7 @@ fn part_2(input: &[u32], width: usize, height: usize) {
 
     for chunk in image.chunks(width) {
         for &x in chunk {
-            print!("{}", if x == 0 { ' ' } else { '█' });
+            print!("{}", if x == 0 { '⠀' } else { '█' });
         }
         println!();
     }
