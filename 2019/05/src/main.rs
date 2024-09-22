@@ -1,7 +1,7 @@
 use std::{env, error::Error, process::exit};
 
 #[tokio::main]
-async fn main() -> Result<(), Box<dyn Error>> {
+async fn main() -> Result<(), Box<dyn Error + Send + Sync>> {
     let args: Vec<String> = env::args().collect();
 
     if args.len() < 2 {

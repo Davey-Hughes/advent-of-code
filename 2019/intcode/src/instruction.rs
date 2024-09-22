@@ -10,7 +10,7 @@ pub struct Instruction {
 }
 
 impl Instruction {
-    pub fn new(program: &[i64], addr: usize) -> Result<Self, Box<dyn Error>> {
+    pub fn new(program: &[i64], addr: usize) -> Result<Self, Box<dyn Error + Send + Sync>> {
         let op = program
             .get(addr)
             .ok_or("Address {addr} does not exist in the program.")?;
@@ -33,7 +33,7 @@ impl Instruction {
             .map(TryInto::try_into)
             .collect::<Result<Vec<_>, _>>()?;
 
-        if (addr + opcode.len()) >= program.len() {
+        if (addr + opcode.len()) > program.len() {
             return Err("Program does not contain enough data for the instruction.")?;
         }
 
