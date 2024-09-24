@@ -45,6 +45,15 @@ impl Interpreter {
         self.output_rx.recv().await
     }
 
+    #[must_use]
+    pub fn output_history(&self) -> &[i64] {
+        self.executor.output_history()
+    }
+
+    pub async fn exec_one(&mut self) -> Result<Option<i64>, Box<dyn Error + Send + Sync>> {
+        self.executor.exec_one().await
+    }
+
     pub async fn exec(&mut self) -> Result<(), Box<dyn Error + Send + Sync>> {
         self.executor.exec().await
     }
@@ -60,14 +69,14 @@ impl Interpreter {
 
 impl fmt::Debug for Interpreter {
     fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
-        writeln!(f, "{:?}", self.executor)?;
+        write!(f, "{:?}", self.executor)?;
         Ok(())
     }
 }
 
 impl fmt::Display for Interpreter {
     fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
-        writeln!(f, "{}", self.executor)?;
+        write!(f, "{}", self.executor)?;
         Ok(())
     }
 }

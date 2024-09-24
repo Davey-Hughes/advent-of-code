@@ -5,6 +5,7 @@ pub enum ModeOpt {
     #[default]
     Position = 0,
     Immediate = 1,
+    Relative = 2,
 }
 
 impl TryFrom<u32> for ModeOpt {
@@ -13,6 +14,7 @@ impl TryFrom<u32> for ModeOpt {
         match value {
             0 => Ok(Self::Position),
             1 => Ok(Self::Immediate),
+            2 => Ok(Self::Relative),
             _ => Err("Invalid mode"),
         }
     }
@@ -29,6 +31,7 @@ pub enum Opcode {
     Jf = 6,
     Lt = 7,
     Eq = 8,
+    Rel = 9,
     Halt = 99,
 }
 
@@ -37,7 +40,7 @@ impl Opcode {
         match self {
             Self::Add | Self::Mul | Self::Lt | Self::Eq => 4,
             Self::Jt | Self::Jf => 3,
-            Self::In | Self::Out => 2,
+            Self::In | Self::Out | Self::Rel => 2,
             Self::Halt => 1,
         }
     }

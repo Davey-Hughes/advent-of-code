@@ -58,13 +58,18 @@ impl fmt::Display for Instruction {
         let mut params = vec![];
 
         for (i, p) in self.parameters[1..].iter().enumerate() {
-            let brackets = if self.modes[i] == ModeOpt::Position {
-                ("[", "]")
-            } else {
-                ("", "")
+            let brackets = match self.modes.get(i) {
+                Some(ModeOpt::Position | ModeOpt::Relative) => ("[", "]"),
+                _ => ("", ""),
             };
 
-            params.push(format!("{}{}{}", brackets.0, p, brackets.1));
+            let rel = if self.modes[i] == ModeOpt::Relative {
+                " + rel"
+            } else {
+                ""
+            };
+
+            params.push(format!("{}{}{}{}", brackets.0, p, rel, brackets.1));
         }
 
         write!(f, "\t{}", params.join(", "))?;
