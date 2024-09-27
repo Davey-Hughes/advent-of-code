@@ -1,0 +1,10 @@
+[package]
+name = "aoc-2019-12"
+version = "0.1.0"
+edition = "2021"
+
+[dependencies]
+anyhow = "1.0.89"
+itertools = "0.13.0"
+num = "0.4.3"
+regex = "1.10.6"
