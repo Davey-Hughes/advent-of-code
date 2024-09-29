@@ -2,7 +2,7 @@ use core::fmt;
 use std::{
     error::Error,
     fs,
-    ops::{Deref, Index, IndexMut},
+    ops::{Deref, DerefMut, Index, IndexMut},
 };
 
 use tokio::sync::mpsc;
@@ -12,7 +12,7 @@ use crate::{
     opcode::{ModeOpt, Opcode},
 };
 
-struct Memory(Vec<i64>);
+pub struct Memory(Vec<i64>);
 
 #[allow(dead_code)]
 impl Memory {
@@ -64,15 +64,35 @@ impl Deref for Memory {
     }
 }
 
+impl DerefMut for Memory {
+    fn deref_mut(&mut self) -> &mut Self::Target {
+        &mut self.0
+    }
+}
+
+impl fmt::Display for Memory {
+    fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
+        for line in self.0.chunks(8) {
+            let mut out_line = vec![];
+            for val in line {
+                out_line.push(format!("{val:8}\t"));
+            }
+            writeln!(f, "{}", out_line.join("\t"))?;
+        }
+
+        Ok(())
+    }
+}
+
 pub struct Executor {
-    memory: Memory,
-    pc: usize,
-    rel: isize,
+    pub memory: Memory,
+    pub pc: usize,
+    pub rel: isize,
 
     input_rx: mpsc::Receiver<i64>,
     input_history: Vec<i64>,
 
-    output_tx: Option<mpsc::Sender<i64>>,
+    output_tx: Option<mpsc::UnboundedSender<i64>>,
     output_history: Vec<i64>,
 }
 
@@ -90,7 +110,7 @@ impl Executor {
     pub fn from_file(
         file: &str,
         input_rx: mpsc::Receiver<i64>,
-        output_tx: mpsc::Sender<i64>,
+        output_tx: mpsc::UnboundedSender<i64>,
     ) -> Result<Self, Box<dyn Error + Send + Sync>> {
         let contents = fs::read_to_string(file)?;
 
@@ -164,7 +184,6 @@ impl Executor {
                     .as_mut()
                     .expect("Tried to output when program already halted")
                     .send(message)
-                    .await
                     .expect("Tried to output when program already halted");
                 self.output_history.push(message);
             }
@@ -259,11 +278,9 @@ impl fmt::Display for Executor {
             }
 
             // show which line the program counter is on
-            if addr == self.pc {
-                write!(f, "> ")?;
-            }
+            let pc_indicator = if addr == self.pc { "> " } else { "  " };
 
-            writeln!(f, "{addr:08x}:\t{ins}")?;
+            writeln!(f, "{pc_indicator}{addr:08x}:\t{ins}")?;
             addr += ins.opcode.len();
         }
 

@@ -4,8 +4,8 @@ use std::error::Error;
 use tokio::sync::mpsc;
 
 pub struct Interpreter {
-    executor: Executor,
-    output_rx: mpsc::Receiver<i64>,
+    pub executor: Executor,
+    output_rx: mpsc::UnboundedReceiver<i64>,
     input_tx: Option<mpsc::Sender<i64>>,
 }
 
@@ -15,7 +15,7 @@ impl Interpreter {
         file: &str,
         input: Vec<i64>,
     ) -> Result<Self, Box<dyn Error + Send + Sync>> {
-        let (output_tx, output_rx) = mpsc::channel(32);
+        let (output_tx, output_rx) = mpsc::unbounded_channel();
         let (input_tx, input_rx) = mpsc::channel(32);
 
         for i in input.clone() {
@@ -50,6 +50,12 @@ impl Interpreter {
         self.executor.output_history()
     }
 
+    pub fn set_memory(&mut self, address: usize, value: i64) -> Option<()> {
+        *self.executor.memory.get_mut(address)? = value;
+
+        Some(())
+    }
+
     pub async fn exec_one(&mut self) -> Result<Option<i64>, Box<dyn Error + Send + Sync>> {
         self.executor.exec_one().await
     }
@@ -60,9 +66,9 @@ impl Interpreter {
 
     pub fn exec_spawn(
         mut self,
-    ) -> Result<(mpsc::Sender<i64>, mpsc::Receiver<i64>), Box<dyn Error + Send + Sync>> {
+    ) -> Result<(mpsc::Sender<i64>, mpsc::UnboundedReceiver<i64>), Box<dyn Error + Send + Sync>>
+    {
         tokio::spawn(async move { self.executor.exec().await });
-
         Ok((self.input_tx.ok_or("Input already closed")?, self.output_rx))
     }
 }

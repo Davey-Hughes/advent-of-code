@@ -5,5 +5,8 @@ edition = "2021"
 
 [dependencies]
 console = "0.15.8"
+crossterm = { version = "0.28.1", features = ["event-stream"] }
+futures = "0.3.30"
 num_enum = "0.7.3"
+ratatui = { version = "0.28.1", features = ["all-widgets"] }
 tokio = { version = "1.40.0", features = ["full", "sync"] }
