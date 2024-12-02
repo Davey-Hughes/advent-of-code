@@ -101,10 +101,10 @@ impl Hull {
         self.robot.direction = self.robot.direction.turn(direction);
 
         match self.robot.direction {
-            Direction::Up => self.robot.y -= 1,
-            Direction::Down => self.robot.y += 1,
-            Direction::Left => self.robot.x -= 1,
-            Direction::Right => self.robot.x += 1,
+            Direction::Up => self.robot.y = self.robot.y.wrapping_sub(1),
+            Direction::Down => self.robot.y = self.robot.y.wrapping_add(1),
+            Direction::Left => self.robot.x = self.robot.x.wrapping_sub(1),
+            Direction::Right => self.robot.x = self.robot.x.wrapping_add(1),
         }
 
         if self.panels.get(self.robot.y).is_none() {
@@ -112,7 +112,7 @@ impl Hull {
 
             if self.robot.direction == Direction::Up {
                 self.panels.rotate_right(1);
-                self.robot.y += 1;
+                self.robot.y = self.robot.y.wrapping_add(1);
             }
         }
 
@@ -124,7 +124,7 @@ impl Hull {
                 }
             }
             if self.robot.direction == Direction::Left {
-                self.robot.x += 1;
+                self.robot.x = self.robot.x.wrapping_add(1);
             }
         }
     }
