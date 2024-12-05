@@ -31,23 +31,17 @@ fn parse_input(file_string: &str) -> Result<(Rules, Updates), Box<dyn Error>> {
     Ok((rules, updates))
 }
 
-fn validate_rules(rule: &[u64], prev_updates: &[u64]) -> bool {
-    for num in prev_updates {
-        if rule.contains(num) {
-            return false;
-        }
-    }
-
-    true
-}
 fn validate_line(rules: &Rules, line: &[u64]) -> bool {
     for (i, num) in line.iter().enumerate() {
         if let Some(after) = rules.get(num) {
-            if !validate_rules(after, &line[..i]) {
-                return false;
+            for n in &line[..i] {
+                if after.contains(n) {
+                    return false;
+                }
             }
         }
     }
+
     true
 }
 
