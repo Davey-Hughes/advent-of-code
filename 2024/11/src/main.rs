@@ -15,17 +15,10 @@ fn blink_stone(stone: u64) -> Vec<u64> {
         return vec![1];
     }
 
-    let mut stone_string = stone.to_string();
-    if stone_string.len() % 2 == 0 {
-        let second = stone_string
-            .split_off(stone_string.len() / 2)
-            .parse()
-            .expect("Unable to parse string to u64");
-
-        return vec![
-            stone_string.parse().expect("Unable to parse string to u64"),
-            second,
-        ];
+    let len = stone.ilog10() + 1;
+    if len % 2 == 0 {
+        let half = 10u64.pow(len / 2);
+        return vec![stone / half, stone % half];
     }
 
     vec![stone * 2024]
