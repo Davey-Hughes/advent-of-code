@@ -33,7 +33,6 @@ fn num_stones(stones: &[u64], blinks: u64) -> usize {
     for _ in 0..blinks {
         stones_map = stones_map
             .iter()
-            .filter(|stone| *stone.1 != 0)
             .flat_map(|stone| blink_stone(*stone.0).into_iter().map(|val| (val, *stone.1)))
             .fold(HashMap::new(), |mut map, (k, v)| {
                 *map.entry(k).or_insert(0) += v;
