@@ -1,7 +1,5 @@
 use std::{collections::HashMap, env, error::Error, fs, process::exit};
 
-use cached::proc_macro::cached;
-
 fn parse_input(input_string: &str) -> Result<Vec<u64>, Box<dyn Error>> {
     Ok(input_string
         .split_whitespace()
@@ -9,7 +7,6 @@ fn parse_input(input_string: &str) -> Result<Vec<u64>, Box<dyn Error>> {
         .collect::<Result<Vec<_>, _>>()?)
 }
 
-#[cached]
 fn blink_stone(stone: u64) -> Vec<u64> {
     if stone == 0 {
         return vec![1];
