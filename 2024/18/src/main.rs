@@ -42,24 +42,20 @@ fn search(
     let mut seen = HashSet::new();
     let mut queue = VecDeque::from([(start, 0)]);
 
-    loop {
-        let pop = match algorithm {
-            SearchAlgorithm::BFS => queue.pop_front(),
-            SearchAlgorithm::DFS => queue.pop_back(),
-        };
+    let f = match algorithm {
+        SearchAlgorithm::BFS => VecDeque::pop_front,
+        SearchAlgorithm::DFS => VecDeque::pop_back,
+    };
 
-        if let Some((current, steps)) = pop {
-            if current == end {
-                return Some(steps);
+    while let Some((current, steps)) = f(&mut queue) {
+        if current == end {
+            return Some(steps);
+        }
+        for next in neighbors(current, end) {
+            if !byte_set.contains(&next) && !seen.contains(&next) {
+                seen.insert(next);
+                queue.push_back((next, steps + 1));
             }
-            for next in neighbors(current, end) {
-                if !byte_set.contains(&next) && !seen.contains(&next) {
-                    seen.insert(next);
-                    queue.push_back((next, steps + 1));
-                }
-            }
-        } else {
-            break;
         }
     }
 
