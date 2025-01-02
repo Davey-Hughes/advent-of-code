@@ -167,7 +167,11 @@ async fn paint(
             Panel::Black | Panel::Default => 0,
             Panel::White => 1,
         };
-        input_tx.send(panel).await?;
+
+        match input_tx.send(panel).await {
+            Ok(()) => (),
+            Err(_) => break,
+        }
 
         match output_rx.recv().await {
             Some(0) => hull.paint(Panel::Black),
