@@ -1,0 +1,8 @@
+[package]
+name = "aoc-2019-15"
+version = "0.1.0"
+edition = "2021"
+
+[dependencies]
+intcode = { path = "../intcode" }
+tokio = { version = "1.42.0", features = ["full"] }
