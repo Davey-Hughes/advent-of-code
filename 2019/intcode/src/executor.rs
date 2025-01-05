@@ -175,7 +175,9 @@ impl Executor {
                     self.memory[location] = message;
                     self.input_history.push(message);
                 } else {
-                    panic!("Input channel closed but program expects input");
+                    // program already halted
+                    self.output_tx = None;
+                    return Ok(Some(0));
                 }
             }
             Opcode::Out => {
