@@ -37,6 +37,7 @@ fn phase(input: &[i64]) -> Vec<i64> {
         })
         .collect::<Vec<_>>()
 }
+
 fn part_1(mut input: Vec<i64>) -> String {
     for _ in 0..100 {
         input = phase(&input);
