@@ -50,8 +50,8 @@ run INPUT-DIR YEAR="20[0-9]\\{2\\}" DAY="[0-9]\\{2\\}":
     for d in $sols; do
       year=$(basename $(dirname $d));
       day=$(basename $d);
-      input_file="{{INPUT-DIR}}$year/$day/input.txt";
-      output_file="{{INPUT-DIR}}$year/$day/output.txt";
+      input_file="{{INPUT-DIR}}/$year/$day/input.txt";
+      output_file="{{INPUT-DIR}}/$year/$day/output.txt";
 
       pushd $d> /dev/null;
 
