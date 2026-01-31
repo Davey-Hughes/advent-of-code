@@ -105,7 +105,7 @@ fn part_2(instructions: &[Instruction]) -> u32 {
 
             ret
         })
-        .sum::<u32>()
+        .sum()
 }
 
 fn main() -> Result<(), Box<dyn Error>> {
